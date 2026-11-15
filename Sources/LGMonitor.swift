@@ -35,6 +35,32 @@ enum PBPMode: UInt16 {
     }
 }
 
+/// Values of the standard input-source code (0x60) that the monitor advertises.
+/// The standard names do not match this monitor's ports exactly: its USB-C /
+/// Thunderbolt input reads back as 0x0F, which the standard calls DisplayPort 1.
+enum LGInput: UInt16, CaseIterable {
+    case usbC = 0x0F, displayPort = 0x10, hdmi1 = 0x11, hdmi2 = 0x12
+
+    var label: String {
+        switch self {
+        case .usbC: return "USB-C / Thunderbolt"
+        case .displayPort: return "DisplayPort (unverified)"
+        case .hdmi1: return "HDMI 1"
+        case .hdmi2: return "HDMI 2"
+        }
+    }
+
+    /// Name used on the command line.
+    var argument: String {
+        switch self {
+        case .usbC: return "usbc"
+        case .displayPort: return "dp"
+        case .hdmi1: return "hdmi1"
+        case .hdmi2: return "hdmi2"
+        }
+    }
+}
+
 enum LGError: Error, CustomStringConvertible {
     case notConnected
     case ambiguous(Int)
@@ -58,6 +84,7 @@ enum LGMonitor {
     private static let chip: UInt32 = 0x37     // DDC/CI I2C address
     private static let host: UInt8 = 0x51      // standard host source address
     private static let pbpCode: UInt8 = 0xD7
+    private static let inputCode: UInt8 = 0x60
 
     static func displayID() -> CGDirectDisplayID? {
         var count: UInt32 = 0
@@ -108,8 +135,29 @@ enum LGMonitor {
     /// Set VCP 0xD7. Returns the bytes sent.
     @discardableResult
     static func setPBP(_ mode: PBPMode) throws -> [UInt8] {
+        try setVCP(pbpCode, mode.rawValue)
+    }
+
+    /// Get VCP 0xD7 from the monitor. Returns nil if it gave no valid answer, which
+    /// happens for a few seconds while it is switching modes.
+    static func readPBP() throws -> UInt16? {
+        try readVCP(pbpCode)
+    }
+
+    /// Set VCP 0x60 (standard input source). Returns the bytes sent.
+    @discardableResult
+    static func setInput(_ input: LGInput) throws -> [UInt8] {
+        try setVCP(inputCode, input.rawValue)
+    }
+
+    /// Get VCP 0x60. Returns nil if the monitor gave no valid answer.
+    static func readInput() throws -> UInt16? {
+        try readVCP(inputCode)
+    }
+
+    private static func setVCP(_ code: UInt8, _ value: UInt16) throws -> [UInt8] {
         let svc = try service()
-        var packet = checksummed([0x84, 0x03, pbpCode, UInt8(mode.rawValue >> 8), UInt8(mode.rawValue & 0xFF)])
+        var packet = checksummed([0x84, 0x03, code, UInt8(value >> 8), UInt8(value & 0xFF)])
         for _ in 0..<3 {   // LG's helper sends a set three times
             usleep(10_000)
             guard IOAVServiceWriteI2C(svc, chip, UInt32(host), &packet, UInt32(packet.count)) == KERN_SUCCESS else {
@@ -119,11 +167,9 @@ enum LGMonitor {
         return packet
     }
 
-    /// Get VCP 0xD7 from the monitor. Returns nil if it gave no valid answer, which
-    /// happens for a few seconds while it is switching modes.
-    static func readPBP() throws -> UInt16? {
+    private static func readVCP(_ code: UInt8) throws -> UInt16? {
         let svc = try service()
-        var packet = checksummed([0x82, 0x01, pbpCode])
+        var packet = checksummed([0x82, 0x01, code])
         for _ in 0..<3 {
             for _ in 0..<2 {   // the monitor only answers when the request is sent twice
                 usleep(10_000)
@@ -137,7 +183,7 @@ enum LGMonitor {
             // [6E 88 02 result code type maxH maxL curH curL chk]
             var chk: UInt8 = 0x50
             for b in r[0..<10] { chk ^= b }
-            if r[2] == 0x02, r[3] == 0, r[4] == pbpCode, chk == r[10] {
+            if r[2] == 0x02, r[3] == 0, r[4] == code, chk == r[10] {
                 return UInt16(r[8]) << 8 | UInt16(r[9])
             }
             usleep(100_000)
