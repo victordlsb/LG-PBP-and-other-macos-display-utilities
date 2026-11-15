@@ -1,0 +1,10 @@
+# Build products
+bin/
+*.app/
+
+# Local test records (contain personal settings)
+widget-test/
+pip-off.txt
+pip-on.txt
+
+.DS_Store
