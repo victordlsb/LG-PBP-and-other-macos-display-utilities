@@ -1,4 +1,4 @@
-# macOS Display Manager
+# LG PBP and other macOS display utilities
 
 A small macOS menu bar app, called **LG PBP**, that started as a replacement for
 LG Switch on an LG UltraFine 40U990A and grew into a general desk-setup helper.
