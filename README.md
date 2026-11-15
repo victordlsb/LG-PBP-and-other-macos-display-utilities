@@ -1,7 +1,8 @@
-# LG PBP
+# macOS Display Manager
 
-A small macOS menu bar app that started as a replacement for LG Switch on an
-LG UltraFine 40U990A and grew into a general desk-setup helper.
+A small macOS menu bar app, called **LG PBP**, that started as a replacement for
+LG Switch on an LG UltraFine 40U990A and grew into a general desk-setup helper.
+Despite the name, only the Picture-by-Picture control is specific to that monitor.
 
 It does four things:
 
@@ -171,5 +172,9 @@ before you change anything.
 
 - [ddcutil wiki: Switching input source on LG monitors](https://github.com/rockowitz/ddcutil/wiki/Switching-input-source-on-LG-monitors)
 - [m1ddc](https://github.com/waydabber/m1ddc), for DDC over `IOAVService` on Apple Silicon
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 Not affiliated with or endorsed by LG or Apple.
