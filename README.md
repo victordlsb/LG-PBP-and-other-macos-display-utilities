@@ -135,7 +135,7 @@ refuses when more than one external display is connected, since it cannot tell
 which one is the LG.
 
 Other LG models are reported to use the same code with some of the same values, so
-adapting it may be as simple as changing `vendor` and `model` in
+adapting it may be as simple as changing `vendor` and `models` in
 `Sources/LGMonitor.swift`. That is untested and at your own risk; read the next
 section first.
 

@@ -38,6 +38,19 @@ and sends nothing to the monitor.
 | Write `0x60` = `0x11` (HDMI 1) | Ignored: the input stayed on USB-C |
 | `0xF4` = `0x90` on `0x50`, sent from the active input | Works: switches to HDMI 1 |
 | `0xF4` = `0xD1` on `0x50`, sent from the Mac that was **not** on screen | No effect |
+| Read and write `0xD7` over HDMI 1 through a USB-C to HDMI adapter (second Mac) | Works |
+| Write `0xD7` = 5 / 1 from the Mac that is **not** on screen | Works |
+
+PBP side: the input that is on screen when PBP is switched on goes on the **left**
+(the large part in 75/25), whichever Mac sends the command. No DDC command for
+swapping the sides is known.
+
+The EDID model number depends on the input: `0x9EBA` over USB-C, `0x9EB8` over
+HDMI 1. `LGMonitor.models` accepts both.
+
+`bin/lgpbp state` only describes the Mac it runs on: on the Mac that is not on
+screen it keeps reporting the last mode, and with a bandwidth-limited link macOS
+may pick a half-width mode while PBP is off. The read of `0xD7` is authoritative.
 
 Open questions about input switching:
 
@@ -59,6 +72,12 @@ Development" certificate if the keychain has one, otherwise ad hoc. With an ad-h
 signature the Accessibility permission breaks on every rebuild; the fix is for the
 owner to run `tccutil reset Accessibility local.lgpbp.menubar` and grant it again.
 Do not run that yourself: it changes privacy settings.
+
+A revoked "Apple Development" certificate still looks valid in the keychain, but
+macOS treats an app signed with it as malware and offers to move it to the Bin.
+`build.sh` skips revoked identities and refuses to finish if the signature it made
+is revoked; the fix is a new certificate from Xcode (Settings → Accounts → Manage
+Certificates) and deleting the old one, both done by the owner.
 
 ## Git
 

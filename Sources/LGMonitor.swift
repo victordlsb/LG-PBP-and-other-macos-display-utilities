@@ -95,8 +95,10 @@ enum LGError: Error, CustomStringConvertible {
 enum LGMonitor {
     // EDID identity of the 40U990A. Commands are refused for any other display,
     // because 0xD7 means something else on other monitors.
+    // The model number depends on the input: 0x9EBA over USB-C / Thunderbolt,
+    // 0x9EB8 over HDMI 1 (seen through a USB-C to HDMI adapter).
     static let vendor: UInt32 = 0x1E6D
-    static let model: UInt32 = 0x9EBA
+    static let models: Set<UInt32> = [0x9EBA, 0x9EB8]
 
     private static let chip: UInt32 = 0x37     // DDC/CI I2C address
     private static let host: UInt8 = 0x51      // standard host source address
@@ -112,7 +114,7 @@ enum LGMonitor {
         var ids = [CGDirectDisplayID](repeating: 0, count: 16)
         guard CGGetOnlineDisplayList(16, &ids, &count) == .success else { return nil }
         return ids.prefix(Int(count)).first {
-            CGDisplayVendorNumber($0) == vendor && CGDisplayModelNumber($0) == model
+            CGDisplayVendorNumber($0) == vendor && models.contains(CGDisplayModelNumber($0))
         }
     }
 
