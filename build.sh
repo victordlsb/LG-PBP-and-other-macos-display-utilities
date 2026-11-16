@@ -30,6 +30,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleVersion</key><string>1</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSLocalNetworkUsageDescription</key><string>LG PBP talks to its copy on your other Mac, to wake that Mac's picture before the monitor switches to it.</string>
+    <key>NSBonjourServices</key><array><string>_lgpbp._tcp</string></array>
 </dict>
 </plist>
 EOF

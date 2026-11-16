@@ -62,9 +62,21 @@ per Mac, only applies when PBP is being turned on, and only offers inputs whose
 switch code is confirmed (USB-C, DisplayPort and HDMI 1).
 
 **Full Screen: This Mac / Other Mac** shows one Mac on the whole screen. If PBP is
-on, it is turned off first; then the monitor switches to that input. **⌃⌥⌘O** shows
-the other Mac (the one on the other input) from whichever Mac you press it on. The
-app tells which input it is on from the monitor's EDID, without asking the monitor.
+on, it is turned off first; then the monitor switches to that input. **⌃⌥⌘O** toggles
+between the two Macs: it shows the other Mac, and pressed again on the same keyboard
+it brings this Mac back, even though this Mac is then not the one on screen. The
+monitor cannot be asked which input it is showing, so the app goes by the last switch
+it sent itself or heard about from the other Mac; after a change made on the joystick,
+a press may change nothing, and the next one does.
+
+The two Macs' copies of the app find each other on the local network (Bonjour,
+`_lgpbp._tcp`; macOS asks once for Local Network access on each Mac). Before switching
+to the other Mac, the app asks it to wake its picture and waits for the answer: a Mac
+with its lid closed lets its picture sleep, and the monitor would otherwise find no
+signal and fall back a few seconds later. They also tell each other which input was
+put full screen. The menu shows whether the other Mac's app is in reach; when it is
+not, the switch is sent anyway. The app tells which input it is on from the
+monitor's EDID, without asking the monitor.
 
 The same commands are available in the terminal:
 
@@ -207,6 +219,7 @@ time and save a record of the values before you change anything.
 | `Sources/Layouts.swift` | Layout model and storage |
 | `Sources/LayoutEditor.swift` | The layout editor |
 | `Sources/Sidecar.swift` | iPad as a display |
+| `Sources/Peer.swift` | Link between the two Macs: wake the other picture, share the input on screen |
 | `Sources/WidgetLayouts.swift` | Widget position save and restore |
 | `Sources/ScrollReverser.swift` | Mouse-wheel direction reversal |
 | `Sources/app/main.swift` | Menu bar app |

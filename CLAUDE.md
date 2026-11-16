@@ -53,7 +53,19 @@ the chosen input first (`0xF4` on `0x50`), waiting 4 s, then writing `0xD7`; the
 Verified from the HDMI 1 Mac with USB-C as the left side: the picture shows the
 USB-C Mac for ~4 s, then PBP comes on with USB-C left and HDMI 1 right.
 
-"Full Screen" in the app (and ⌃⌥⌘O, "the other Mac") reads `0xD7`, writes `0xD7` = 1
+⌃⌥⌘O toggles between the two Macs: the other one, or this Mac if the other one is what
+the app last put full screen (`fullScreenInput`, remembered in memory only, because
+the monitor cannot say which input it shows).
+
+Switching to a Mac whose picture is asleep fails: the monitor keeps the link to the
+input it is not showing, so that Mac gets no hot-plug and stays dark, and the monitor
+falls back after a few seconds (seen with the DisplayPort Mac's lid closed; with
+`caffeinate -d` running there it worked). `Sources/Peer.swift` handles it over the
+local network, with no monitor access: the sending Mac asks the other app to wake its
+picture (`IOPMAssertionDeclareUserActivity`) and waits for "awake" before the switch.
+The same link carries "shown <input>" so both apps know the input last put full screen.
+
+"Full Screen" in the app (and ⌃⌥⌘O) reads `0xD7`, writes `0xD7` = 1
 if PBP is on, waits 3 s, then sends `0xF4` with the input's value. Not run yet. It
 never sends `0xF4` while PBP is on. Which input the Mac is on comes from the EDID
 model number (`LGMonitor.ownInput`), not from the monitor.

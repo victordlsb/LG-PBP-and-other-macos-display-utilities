@@ -32,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// joystick) shows up the next time the menu opens or the toggle is used.
     private var monitorState: PBPMode?
     private var modeItems: [NSMenuItem] = []
+    /// The input this app last put full screen, for the ⌃⌥⌘O toggle. The monitor cannot
+    /// be asked which input it shows (0x60 answers with the asking Mac's own input), so
+    /// this is only what was last sent from here: nil when unknown or after a PBP change,
+    /// and wrong after a change made on the joystick or from the other Mac.
+    private var fullScreenInput: LGInput?
     private var iPadBusy = false
     /// Keeping the iPad connected across monitor changes: see `trackIPads()`.
     private var iPadsOnDisplay: Set<String> = []
@@ -72,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         iPadsOnDisplay = Sidecar.connectedNames
         SnapController.shared.start()
         ScrollReverser.shared.start()
+        Peer.shared.onShown = { [weak self] input in self?.fullScreenInput = input }
+        Peer.shared.start()
     }
 
     // MARK: Menu
@@ -140,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.isEnabled = state != nil && !busy
             menu.addItem(item)
         }
+        menu.addItem(disabled(Peer.shared.isLinked ? "Other Mac's LG PBP: in reach" : "Other Mac's LG PBP: not found"))
 
         // iPad as an extended display (Sidecar).
         menu.addItem(.separator())
@@ -292,11 +300,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         showFullScreen(input)
     }
 
-    /// Hotkey: shows the other Mac full screen (the one on the other input).
+    /// Hotkey: toggles between the two Macs full screen. It shows the other Mac, unless
+    /// that is what this app last did, in which case it brings this Mac back; so it also
+    /// works while this Mac is not the one on screen. If the remembered input is stale
+    /// the press changes nothing on screen, and the next press does.
     func showOtherMac() {
-        guard let own = LGMonitor.ownInput(),
+        guard let own = LGMonitor.ownInput(), own.switchConfirmed,
               let other = LGInput.inUse.first(where: { $0.switchConfirmed && $0 != own }) else { NSSound.beep(); return }
-        showFullScreen(other)
+        showFullScreen(fullScreenInput == other ? own : other)
     }
 
     private func showFullScreen(_ input: LGInput) {
@@ -305,6 +316,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         queue.async {
             var failure: String?
             do {
+                // A Mac with its lid closed lets its picture sleep, and the monitor then
+                // falls back to this input: have the other Mac wake its picture first.
+                if input != LGMonitor.ownInput() { _ = Peer.shared.wakeOtherMac() }
                 // Ask the monitor whether PBP is on; the picture's shape can be wrong.
                 let read = try? LGMonitor.readMode()
                 let pbpOn = (read ?? LGMonitor.inferredMode() ?? .off) != .off
@@ -314,7 +328,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {
                 self.busy = false
                 self.lastError = failure
-                if failure == nil { self.monitorState = .off }
+                if failure == nil {
+                    self.monitorState = .off
+                    self.fullScreenInput = input
+                    Peer.shared.announce(shown: input)
+                }
                 if failure != nil { NSSound.beep() }
                 self.refreshIcon()
             }
@@ -342,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             DispatchQueue.main.async {
                 self.busy = false
                 self.lastError = failure
-                if failure == nil { self.monitorState = mode }
+                if failure == nil { self.monitorState = mode; self.fullScreenInput = nil }
                 if failure != nil { NSSound.beep() }
                 self.refreshIcon()
             }
@@ -509,7 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: Global hotkeys (Control-Option-Command-P for PBP, -I for the iPad, -O for the other Mac full screen)
+    // MARK: Global hotkeys (Control-Option-Command-P for PBP, -I for the iPad, -O to toggle between the two Macs full screen)
 
     private func registerHotKey() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
