@@ -33,6 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var monitorState: PBPMode?
     private var modeItems: [NSMenuItem] = []
     private var iPadBusy = false
+    /// Keeping the iPad connected across monitor changes: see `trackIPads()`.
+    private var iPadsOnDisplay: Set<String> = []
+    private var iPadsToReconnect: Set<String> = []
+    private var iPadsDroppedAt = Date.distantPast
+    private var lgShape = ""
+    private var lgChangedAt = Date.distantPast
     private var lastError: String?
     private var hotKeys: [EventHotKeyRef?] = []
     private var widgetWork: DispatchWorkItem?
@@ -62,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                name: NSApplication.didChangeScreenParametersNotification, object: nil)
         registerHotKey()
         refreshIcon()
+        lgShape = currentLGShape()
+        iPadsOnDisplay = Sidecar.connectedNames
         SnapController.shared.start()
         ScrollReverser.shared.start()
     }
@@ -232,6 +240,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func screensChanged() {
         refreshIcon()
+        trackIPads()
         // Wait for the screens to settle before touching widget positions.
         widgetWork?.cancel()
         guard WidgetLayouts.auto else { return }
@@ -354,11 +363,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func toggleIPad(_ device: NSObject) {
         guard !iPadBusy else { return }
         iPadBusy = true
-        Sidecar.setConnected(device, !Sidecar.isConnected(device)) { failure in
+        let connect = !Sidecar.isConnected(device)
+        // A disconnect asked for here is wanted: do not undo it.
+        if !connect {
+            iPadsOnDisplay.remove(Sidecar.name(of: device))
+            iPadsToReconnect.remove(Sidecar.name(of: device))
+        }
+        Sidecar.setConnected(device, connect) { failure in
             self.iPadBusy = false
             self.lastError = failure.map { "iPad display: \($0)" }
             if failure != nil { NSSound.beep() }
         }
+    }
+
+    // macOS drops the iPad display when the LG changes shape or goes away (PBP on or
+    // off, another input full screen). Nothing here can stop that, so the iPad is
+    // connected again afterwards. Only a drop within a few seconds of an LG change
+    // counts: an iPad disconnected by hand, at any other moment, stays disconnected.
+
+    private static let iPadDropWindow: TimeInterval = 20
+
+    private func currentLGShape() -> String {
+        guard let id = LGMonitor.displayID() else { return "none" }
+        return "\(CGDisplayModelNumber(id))-\(CGDisplayPixelsWide(id))x\(CGDisplayPixelsHigh(id))"
+    }
+
+    private func trackIPads() {
+        let now = Date()
+        let shape = currentLGShape()
+        if shape != lgShape { lgShape = shape; lgChangedAt = now }
+
+        let connected = Sidecar.connectedNames
+        let dropped = iPadsOnDisplay.subtracting(connected).subtracting(iPadsToReconnect)
+        iPadsOnDisplay = connected.union(iPadsToReconnect)
+        iPadsToReconnect.subtract(connected)
+        if !dropped.isEmpty { iPadsDroppedAt = now; iPadsToReconnect.formUnion(dropped) }
+
+        // The two events arrive in either order, so accept a drop shortly before or
+        // after the LG change; a drop with no LG change near it was the owner's doing.
+        guard !iPadsToReconnect.isEmpty else { return }
+        if abs(iPadsDroppedAt.timeIntervalSince(lgChangedAt)) < Self.iPadDropWindow {
+            reconnectIPads(attempt: 1)
+        } else if now.timeIntervalSince(iPadsDroppedAt) >= Self.iPadDropWindow {
+            iPadsOnDisplay.subtract(iPadsToReconnect)
+            iPadsToReconnect = []
+        }
+    }
+
+    private var iPadReconnect: DispatchWorkItem?
+
+    private func reconnectIPads(attempt: Int) {
+        iPadReconnect?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.iPadsToReconnect.subtract(Sidecar.connectedNames)
+            guard let name = self.iPadsToReconnect.first else { return }
+            guard !self.iPadBusy, let device = Sidecar.devices.first(where: { Sidecar.name(of: $0) == name }) else {
+                if attempt < 4 { self.reconnectIPads(attempt: attempt + 1) } else { self.forgetIPad(name) }
+                return
+            }
+            self.iPadBusy = true
+            Sidecar.setConnected(device, true) { failure in
+                self.iPadBusy = false
+                if failure == nil {
+                    self.iPadsToReconnect.remove(name)
+                    self.iPadsOnDisplay.insert(name)
+                    if !self.iPadsToReconnect.isEmpty { self.reconnectIPads(attempt: 1) }
+                } else if attempt < 4 {
+                    self.reconnectIPads(attempt: attempt + 1)
+                } else {
+                    self.forgetIPad(name)
+                    self.lastError = "iPad display: could not reconnect (\(failure ?? ""))"
+                }
+            }
+        }
+        iPadReconnect = work
+        // Give the screens a moment to settle after the monitor change before each try.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: work)
+    }
+
+    private func forgetIPad(_ name: String) {
+        iPadsToReconnect.remove(name)
+        iPadsOnDisplay.remove(name)
     }
 
     @objc private func pickLayout(_ sender: NSMenuItem) {

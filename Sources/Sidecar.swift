@@ -34,6 +34,9 @@ enum Sidecar {
         return list("connectedDevices").contains { $0.isEqual(device) || name(of: $0) == wanted }
     }
 
+    /// Names of the iPads currently connected as displays.
+    static var connectedNames: Set<String> { Set(list("connectedDevices").map(name(of:))) }
+
     /// Connects or disconnects the iPad. `completion` receives an error message, or nil on success,
     /// on the main queue.
     static func setConnected(_ device: NSObject, _ connect: Bool, completion: @escaping (String?) -> Void) {

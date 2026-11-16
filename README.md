@@ -106,6 +106,10 @@ Layouts are saved in `~/Library/Application Support/LG PBP/layouts.json`.
 A menu item per iPad in reach, and **⌃⌥⌘I** for the first one. Click to connect
 the iPad as an extended display, click again to disconnect.
 
+macOS disconnects the iPad whenever the LG changes shape or goes away (PBP on or off,
+the other Mac full screen). The app cannot prevent that, so it connects the iPad again
+a few seconds later. An iPad you disconnect yourself stays disconnected.
+
 ### Desktop widget positions (any display)
 
 - **Save Widget Positions for This Screen Setup** stores the current arrangement for
