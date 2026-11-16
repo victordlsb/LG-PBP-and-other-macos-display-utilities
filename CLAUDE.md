@@ -83,7 +83,9 @@ few seconds after a mode switch it gives no valid reply (retry once after 3 s).
 
 ## Building
 
-`./build.sh` builds `bin/lgpbp` and `LG PBP.app`. It signs with an "Apple
+`./build.sh` builds `bin/lgpbp` and installs the app as `/Applications/LG PBP.app`,
+restarting it if it was running. It leaves no copy in the repo, on purpose: two
+copies both get launched and run side by side. It signs with an "Apple
 Development" certificate if the keychain has one, otherwise ad hoc. With an ad-hoc
 signature the Accessibility permission breaks on every rebuild; the fix is for the
 owner to run `tccutil reset Accessibility local.lgpbp.menubar` and grant it again.

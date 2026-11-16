@@ -78,14 +78,14 @@ After each, wait about 6 seconds and check with `bin/lgpbp state`.
 ### 6. Start the app
 
 ```sh
-open "LG PBP.app"
+open "/Applications/LG PBP.app"
 ```
 
 A split-rectangle icon appears in the menu bar. Launching sends nothing to the
 monitor. The owner then:
 
 - chooses **Enable Window Snapping…** and grants Accessibility access;
-- optionally ticks **Launch at Login** (move the app to `/Applications` first).
+- optionally ticks **Launch at Login**.
 
 Layouts and widget positions are stored per Mac in
 `~/Library/Application Support/LG PBP/`; they are not shared between the two Macs.

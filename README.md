@@ -25,10 +25,12 @@ No dependencies, no background polling. Plain Swift and AppKit, built with `swif
 
 ```sh
 ./build.sh
-open "LG PBP.app"
+open "/Applications/LG PBP.app"
 ```
 
-`build.sh` produces the menu bar app (`LG PBP.app`) and a command-line tool (`bin/lgpbp`).
+`build.sh` builds the menu bar app and installs it as `/Applications/LG PBP.app` (the only
+copy: nothing is left in the repo), and builds a command-line tool (`bin/lgpbp`). If the
+app is already running, the build restarts it with the new version.
 
 If you have an Apple Development certificate in your keychain, the build signs the app
 with it. That matters: macOS ties the Accessibility permission to the app's signature,
