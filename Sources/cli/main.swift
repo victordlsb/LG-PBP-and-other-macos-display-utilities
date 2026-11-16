@@ -5,7 +5,7 @@
 //   lgpbp on [50|75]    PBP 50/50 (default) or 75/25
 //   lgpbp off           leave PBP or PIP
 //   lgpbp input         ask the monitor which input is shown (one read of code 0x60)
-//   lgpbp input <name>  switch input: usbc, dp, hdmi1 or hdmi2 (experimental)
+//   lgpbp input <name>  switch input: usbc, usbc-alt, dp, hdmi1 or hdmi2 (LG code 0xF4 on address 0x50)
 
 import Foundation
 
@@ -47,13 +47,22 @@ case "input" where args.count == 1:
         print("Input (60) = \(v): \(label)")
     } catch { fail("\(error)") }
 case "input" where args.count == 2:
-    guard let input = LGInput.allCases.first(where: { $0.argument == args[1] }) else {
-        fail("usage: lgpbp input [usbc|dp|hdmi1|hdmi2]")
+    // "usbc-alt" is the second candidate value for USB-C (0xD2), until one is confirmed.
+    let value: UInt8
+    let label: String
+    if args[1] == "usbc-alt" {
+        value = 0xD2
+        label = "USB-C / Thunderbolt (alternative value)"
+    } else if let input = LGInput.allCases.first(where: { $0.argument == args[1] }) {
+        value = input.switchValue
+        label = input.label
+    } else {
+        fail("usage: lgpbp input [usbc|usbc-alt|dp|hdmi1|hdmi2]")
     }
     do {
-        let bytes = try LGMonitor.setInput(input)
-        print("\(input.label): sent \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
+        let bytes = try LGMonitor.switchInput(value: value)
+        print("\(label): sent on 0x50: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
     } catch { fail("\(error)") }
 default:
-    print("usage: lgpbp state | status | on [50|75] | off | input [usbc|dp|hdmi1|hdmi2]")
+    print("usage: lgpbp state | status | on [50|75] | off | input [usbc|usbc-alt|dp|hdmi1|hdmi2]")
 }

@@ -55,14 +55,14 @@ bin/lgpbp status       # asks the monitor; also detects PIP
 bin/lgpbp on           # PBP 50/50
 bin/lgpbp on 75        # PBP 75/25
 bin/lgpbp off
-bin/lgpbp input        # which input the monitor is showing
-bin/lgpbp input hdmi1  # switch input: usbc, dp, hdmi1, hdmi2 (experimental, see below)
+bin/lgpbp input        # the input this Mac is connected to
+bin/lgpbp input hdmi1  # switch input: usbc, usbc-alt, dp, hdmi1, hdmi2 (experimental)
 ```
 
-Input switching uses the standard input-source code (`0x60`). Reading it works; the
-monitor reports its USB-C / Thunderbolt input as 15 (`0x0F`). Switching with this
-code is ignored by this model (tested: the input did not change), so it is not in
-the menu bar app.
+Input switching is experimental and not in the menu bar app yet. This monitor
+ignores the standard input-source code (`0x60`), so switching uses LG's own code,
+`0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`) is confirmed;
+the value for switching back to USB-C is still being worked out.
 
 ### Window layouts (any display)
 
@@ -148,9 +148,10 @@ only a full factory reset (Settings → General → Reset to Initial Settings) d
 The alternate address is an LG service channel and is the likely culprit, though
 that was never proven.
 
-This code therefore sends exactly one VCP code on the standard address and nothing
-else. If you extend it, add codes one at a time and save a record of the values
-before you change anything.
+This code therefore sends a fixed, short list of commands and nothing else: PBP
+(`0xD7`) and an input read (`0x60`) on the standard address, and the input switch
+(`0xF4`) with five allowed values on `0x50`. If you extend it, add codes one at a
+time and save a record of the values before you change anything.
 
 ## Caveats
 

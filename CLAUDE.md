@@ -11,11 +11,13 @@ during development changed its colour and backlight settings and the owner had t
 factory-reset it. So:
 
 1. **Never sweep or scan DDC codes.** No loops over VCP codes, no "dump everything".
-2. **Never use LG's alternate address `0x50`.** It is a service channel and the
-   likely cause of the damage.
-3. **Only two VCP codes are in scope**, both on the standard address `0x51`:
-   `0xD7` (PBP) and `0x60` (input source). All monitor access lives in
-   `Sources/LGMonitor.swift`; keep it that way.
+2. **LG's alternate address `0x50` is a service channel and the likely cause of
+   the damage.** Exactly one thing may be sent there: the input-switch code `0xF4`
+   with one of the values `0x90`, `0x91`, `0xD0`, `0xD1`, `0xD2`. The owner accepted
+   that risk for this command only. No other code, no reads, no scans, ever.
+3. **Everything else stays on the standard address `0x51`**, and only two codes
+   are in scope there: `0xD7` (PBP) and `0x60` (read the current input). All monitor
+   access lives in `Sources/LGMonitor.swift`; keep it that way.
 4. **Ask the owner before sending the monitor anything**, read or write. Say
    exactly which command you will run and wait for a yes. One approval covers one
    command, not the next one.
@@ -34,6 +36,18 @@ and sends nothing to the monitor.
 | Write `0xD7` = 0, 2, 4 | Ignored |
 | Read `0x60` | Works. The USB-C / Thunderbolt input reads as 15 (`0x0F`) |
 | Write `0x60` = `0x11` (HDMI 1) | Ignored: the input stayed on USB-C |
+| `0xF4` = `0x90` on `0x50`, sent from the active input | Works: switches to HDMI 1 |
+| `0xF4` = `0xD1` on `0x50`, sent from the Mac that was **not** on screen | No effect |
+
+Open questions about input switching:
+
+- Whether `0xD1` or `0xD2` is the value for USB-C. `0xD1` did nothing, but it was
+  sent from the Mac that was not being shown, so the monitor may simply ignore
+  switch commands from an inactive input.
+- The proven `0x90` switch was sent with `m1ddc set input-alt 144`. The project's
+  own `bin/lgpbp input hdmi1` builds the same packet but has not been run yet.
+- Reading `0x60` from the Mac that is not on screen still answers, and still
+  reports that Mac's own input.
 
 Quirks: a "Get VCP" must be written twice before the monitor answers, and for a
 few seconds after a mode switch it gives no valid reply (retry once after 3 s).

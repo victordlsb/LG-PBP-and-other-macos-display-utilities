@@ -1,8 +1,10 @@
 // Shared monitor access for the LG UltraFine 40U990A (Apple Silicon).
 //
-// Everything sent to the monitor goes through this file, and it is limited to ONE
-// control code: 0xD7 (PBP), on the standard DDC address 0x51. The packets are the
-// same ones LG Switch's own helper sends. LG's alternate address (0x50) is never used.
+// Everything sent to the monitor goes through this file, and it is limited to:
+//   - 0xD7 (PBP) and 0x60 (read the input), on the standard DDC address 0x51;
+//   - 0xF4 (switch input), on LG's alternate address 0x50, with a fixed list of values.
+// 0x50 is LG's service channel. A sweep of it during development damaged the monitor's
+// settings, so nothing else may ever be sent there: no other code, no reads, no scans.
 //
 // Values of 0xD7 verified on this monitor:
 //   1 = off (also exits PIP)   3 = PBP 75/25 (3840 + 1280)   5 = PBP 50/50 (2560 + 2560)
@@ -35,16 +37,22 @@ enum PBPMode: UInt16 {
     }
 }
 
-/// Values of the standard input-source code (0x60) that the monitor advertises.
-/// The standard names do not match this monitor's ports exactly: its USB-C /
-/// Thunderbolt input reads back as 0x0F, which the standard calls DisplayPort 1.
+/// The monitor's inputs.
+///
+/// `rawValue` is what the standard input-source code (0x60) reads back. The standard
+/// names do not match this monitor's ports: its USB-C / Thunderbolt input reads 0x0F,
+/// which the standard calls DisplayPort 1. Writing 0x60 is ignored by this monitor.
+///
+/// `switchValue` is what LG's own input-switch code (0xF4 on address 0x50) takes.
+/// Only HDMI 1 has been confirmed on the 40U990A; the others come from notes on
+/// other LG models.
 enum LGInput: UInt16, CaseIterable {
     case usbC = 0x0F, displayPort = 0x10, hdmi1 = 0x11, hdmi2 = 0x12
 
     var label: String {
         switch self {
         case .usbC: return "USB-C / Thunderbolt"
-        case .displayPort: return "DisplayPort (unverified)"
+        case .displayPort: return "DisplayPort"
         case .hdmi1: return "HDMI 1"
         case .hdmi2: return "HDMI 2"
         }
@@ -57,6 +65,15 @@ enum LGInput: UInt16, CaseIterable {
         case .displayPort: return "dp"
         case .hdmi1: return "hdmi1"
         case .hdmi2: return "hdmi2"
+        }
+    }
+
+    var switchValue: UInt8 {
+        switch self {
+        case .usbC: return 0xD1          // unconfirmed; 0xD2 on some LG models
+        case .displayPort: return 0xD0   // unconfirmed
+        case .hdmi1: return 0x90         // confirmed
+        case .hdmi2: return 0x91         // unconfirmed
         }
     }
 }
@@ -85,6 +102,10 @@ enum LGMonitor {
     private static let host: UInt8 = 0x51      // standard host source address
     private static let pbpCode: UInt8 = 0xD7
     private static let inputCode: UInt8 = 0x60
+    private static let altHost: UInt8 = 0x50          // LG service channel: input switching only
+    private static let inputSwitchCode: UInt8 = 0xF4
+    /// The only values that may be sent on the service channel.
+    static let allowedSwitchValues: Set<UInt8> = [0x90, 0x91, 0xD0, 0xD1, 0xD2]
 
     static func displayID() -> CGDirectDisplayID? {
         var count: UInt32 = 0
@@ -144,10 +165,23 @@ enum LGMonitor {
         try readVCP(pbpCode)
     }
 
-    /// Set VCP 0x60 (standard input source). Returns the bytes sent.
+    /// Switch the monitor's input with LG's own code (0xF4 on address 0x50).
+    /// Refuses any value outside the fixed list. Returns the bytes sent.
     @discardableResult
-    static func setInput(_ input: LGInput) throws -> [UInt8] {
-        try setVCP(inputCode, input.rawValue)
+    static func switchInput(value: UInt8) throws -> [UInt8] {
+        guard allowedSwitchValues.contains(value) else { throw LGError.i2c("input value not allowed") }
+        let svc = try service()
+        let body: [UInt8] = [0x84, 0x03, inputSwitchCode, 0x00, value]
+        var chk: UInt8 = 0x6E ^ altHost
+        for b in body { chk ^= b }
+        var packet = body + [chk]
+        for _ in 0..<2 {
+            usleep(10_000)
+            guard IOAVServiceWriteI2C(svc, chip, UInt32(altHost), &packet, UInt32(packet.count)) == KERN_SUCCESS else {
+                throw LGError.i2c("write")
+            }
+        }
+        return packet
     }
 
     /// Get VCP 0x60. Returns nil if the monitor gave no valid answer.

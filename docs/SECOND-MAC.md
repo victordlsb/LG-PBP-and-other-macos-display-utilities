@@ -102,11 +102,23 @@ Tell the owner, plainly:
 
 ## Input switching
 
-Not finished. `bin/lgpbp input` reads the current input and works on the first
-Mac. `bin/lgpbp input <name>` writes the standard code `0x60`, which this model
-**ignores**: tested from the first Mac, the input did not change. There is no need
-to test it again.
+Half done. From the first Mac, switching **to HDMI 1** works. What is missing is the
+way back to USB-C, and this Mac is the right place to find it, because the picture
+is on this Mac when the command needs to be sent.
 
-The alternative reported to work on LG monitors is code `0xF4` on address `0x50`.
-That is the service channel that `CLAUDE.md` rules out. Do not implement or send it
-unless the owner explicitly decides to accept that risk.
+`bin/lgpbp input <name>` sends LG's input-switch code (`0xF4` on address `0x50`).
+See `CLAUDE.md` for what may and may not be sent on that address.
+
+Only do this after step 4 has shown that the adapter passes DDC, and ask the owner
+before each command. Warn them that a successful switch moves the picture to the
+first Mac, and that the way back is the monitor's joystick.
+
+1. With this Mac on screen, run `bin/lgpbp input usbc` (value `0xD1`).
+2. If the picture moves to the first Mac, `0xD1` is the USB-C value. Done.
+3. If nothing happens after 10 seconds, run `bin/lgpbp input usbc-alt` (value `0xD2`).
+4. If that moves the picture, `0xD2` is the value: change `switchValue` for `.usbC`
+   in `Sources/LGMonitor.swift` to `0xD2` and remove the `usbc-alt` argument.
+5. If neither does anything, the adapter may pass reads but not this command, or
+   this monitor uses another value. Stop and report; do not try other values.
+
+Record the result in the table in `CLAUDE.md`.
