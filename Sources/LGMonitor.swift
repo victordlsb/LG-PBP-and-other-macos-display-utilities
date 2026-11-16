@@ -44,8 +44,8 @@ enum PBPMode: UInt16 {
 /// which the standard calls DisplayPort 1. Writing 0x60 is ignored by this monitor.
 ///
 /// `switchValue` is what LG's own input-switch code (0xF4 on address 0x50) takes.
-/// HDMI 1 (0x90) and USB-C (0xD2) are confirmed on the 40U990A; the others come
-/// from notes on other LG models. 0xD1, used for USB-C on some models, does nothing here.
+/// HDMI 1 (0x90), USB-C (0xD2) and DisplayPort (0xD0) are confirmed on the 40U990A;
+/// HDMI 2 comes from notes on other LG models. 0xD1, used for USB-C on some models, does nothing here.
 enum LGInput: UInt16, CaseIterable {
     case usbC = 0x0F, displayPort = 0x10, hdmi1 = 0x11, hdmi2 = 0x12
 
@@ -71,15 +71,19 @@ enum LGInput: UInt16, CaseIterable {
     var switchValue: UInt8 {
         switch self {
         case .usbC: return 0xD2          // confirmed (0xD1 does nothing on this model)
-        case .displayPort: return 0xD0   // unconfirmed
+        case .displayPort: return 0xD0   // confirmed
         case .hdmi1: return 0x90         // confirmed
         case .hdmi2: return 0x91         // unconfirmed
         }
     }
 
+    /// The inputs the two Macs are plugged into. The menu offers only these (when their
+    /// switch value is confirmed), and "the other Mac" is the one not on this Mac's input.
+    static let inUse: [LGInput] = [.usbC, .displayPort]
+
     /// Whether `switchValue` has been seen to work on the 40U990A. Only confirmed
     /// inputs are offered as the PBP left side.
-    var switchConfirmed: Bool { self == .hdmi1 || self == .usbC }
+    var switchConfirmed: Bool { self != .hdmi2 }
 }
 
 enum LGError: Error, CustomStringConvertible {
@@ -100,9 +104,9 @@ enum LGMonitor {
     // EDID identity of the 40U990A. Commands are refused for any other display,
     // because 0xD7 means something else on other monitors.
     // The model number depends on the input: 0x9EBA over USB-C / Thunderbolt,
-    // 0x9EB8 over HDMI 1 (seen through a USB-C to HDMI adapter).
+    // 0x9EB8 over HDMI 1 (seen through a USB-C to HDMI adapter), 0x9EB9 over DisplayPort.
     static let vendor: UInt32 = 0x1E6D
-    static let models: Set<UInt32> = [0x9EBA, 0x9EB8]
+    static let models: Set<UInt32> = [0x9EBA, 0x9EB8, 0x9EB9]
 
     private static let chip: UInt32 = 0x37     // DDC/CI I2C address
     private static let host: UInt8 = 0x51      // standard host source address
@@ -129,6 +133,7 @@ enum LGMonitor {
         switch CGDisplayModelNumber(id) {
         case 0x9EBA: return .usbC
         case 0x9EB8: return .hdmi1
+        case 0x9EB9: return .displayPort
         default: return nil
         }
     }

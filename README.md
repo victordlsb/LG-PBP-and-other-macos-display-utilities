@@ -57,7 +57,7 @@ HDMI 1, choosing **HDMI 1** on the USB-C Mac makes it switch the monitor to HDMI
 wait four seconds and then turn PBP on, so the HDMI Mac ends up on the left. The
 picture briefly shows the HDMI Mac full screen in between. The setting is stored
 per Mac, only applies when PBP is being turned on, and only offers inputs whose
-switch code is confirmed (currently HDMI 1 and USB-C).
+switch code is confirmed (USB-C, DisplayPort and HDMI 1).
 
 **Full Screen: This Mac / Other Mac** shows one Mac on the whole screen. If PBP is
 on, it is turned off first; then the monitor switches to that input. **⌃⌥⌘O** shows
@@ -71,15 +71,16 @@ bin/lgpbp state        # inferred from the Mac's picture; sends nothing to the m
 bin/lgpbp status       # asks the monitor; also detects PIP
 bin/lgpbp on           # PBP 50/50
 bin/lgpbp on 75        # PBP 75/25
-bin/lgpbp on --left usbc    # switch to that input first, so it is on the left (hdmi1 or usbc)
+bin/lgpbp on --left usbc    # switch to that input first, so it is on the left (usbc, dp or hdmi1)
 bin/lgpbp off
 bin/lgpbp input        # the input this Mac is connected to
-bin/lgpbp input hdmi1  # switch input: usbc, dp, hdmi1, hdmi2 (dp and hdmi2 unconfirmed)
+bin/lgpbp input dp     # switch input: usbc, dp, hdmi1, hdmi2 (hdmi2 unconfirmed)
 ```
 
 This monitor ignores the standard input-source code (`0x60`), so switching uses
-LG's own code, `0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`)
-and to USB-C (`0xD2`) is confirmed; DisplayPort and HDMI 2 are not.
+LG's own code, `0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`),
+USB-C (`0xD2`) and DisplayPort (`0xD0`) is confirmed; HDMI 2 is not. The menu only
+offers the inputs listed in `LGInput.inUse` (currently USB-C and DisplayPort).
 
 ### Window layouts (any display)
 

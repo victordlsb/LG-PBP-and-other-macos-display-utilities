@@ -42,6 +42,7 @@ and sends nothing to the monitor.
 | `0xF4` = `0xD2` on `0x50`, sent from the HDMI 1 Mac alone on screen, PBP off | Works: switches to USB-C / Thunderbolt |
 | PBP turned on from the Thunderbolt Mac while it was on screen | Thunderbolt Mac on the left, HDMI 1 Mac on the right: the layout the owner wants |
 | Read and write `0xD7` over HDMI 1 through a USB-C to HDMI adapter (second Mac) | Works |
+| `0xF4` = `0xD0` on `0x50`, sent from the DisplayPort Mac while the USB-C Mac was on screen | Works: switches to DisplayPort. So switching works from the Mac that is **not** on screen |
 | Write `0xD7` = 5 / 1 from the Mac that is **not** on screen | Works |
 
 PBP side: the input that is on screen when PBP is switched on goes on the **left**
@@ -58,7 +59,10 @@ never sends `0xF4` while PBP is on. Which input the Mac is on comes from the EDI
 model number (`LGMonitor.ownInput`), not from the monitor.
 
 The EDID model number depends on the input: `0x9EBA` over USB-C, `0x9EB8` over
-HDMI 1. `LGMonitor.models` accepts both.
+HDMI 1, `0x9EB9` over DisplayPort. `LGMonitor.models` accepts all three.
+
+The second Mac moved from HDMI 1 to **DisplayPort** on 2026-11-16. The two inputs in
+use are listed in `LGInput.inUse` (USB-C and DisplayPort); the menu offers only those.
 
 `bin/lgpbp state` only describes the Mac it runs on: on the Mac that is not on
 screen it keeps reporting the last mode, and with a bandwidth-limited link macOS

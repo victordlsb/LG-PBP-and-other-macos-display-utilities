@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let leftMenu = NSMenu()
         leftMenu.autoenablesItems = false
-        let choices: [LGInput?] = [nil] + LGInput.allCases.filter(\.switchConfirmed)
+        let choices: [LGInput?] = [nil] + LGInput.inUse.filter(\.switchConfirmed)
         for input in choices {
             let item = NSMenuItem(title: input?.label ?? "Input on Screen", action: #selector(pickLeft(_:)), keyEquivalent: "")
             item.target = self
@@ -121,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // One Mac full screen: turns PBP off if needed, then switches input.
         menu.addItem(.separator())
         let own = LGMonitor.ownInput()
-        for input in LGInput.allCases.filter(\.switchConfirmed) {
+        for input in LGInput.inUse.filter(\.switchConfirmed) {
             let who = own == nil ? "" : (input == own ? "This Mac — " : "Other Mac — ")
             let isOther = own != nil && input != own
             let item = NSMenuItem(title: "Full Screen: \(who)\(input.label)", action: #selector(pickFullScreen(_:)),
@@ -286,7 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Hotkey: shows the other Mac full screen (the one on the other input).
     func showOtherMac() {
         guard let own = LGMonitor.ownInput(),
-              let other = LGInput.allCases.first(where: { $0.switchConfirmed && $0 != own }) else { NSSound.beep(); return }
+              let other = LGInput.inUse.first(where: { $0.switchConfirmed && $0 != own }) else { NSSound.beep(); return }
         showFullScreen(other)
     }
 

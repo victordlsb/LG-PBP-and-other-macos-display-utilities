@@ -2,7 +2,7 @@
 //
 //   lgpbp state         PBP state inferred from the Mac's picture (sends nothing to the monitor)
 //   lgpbp status        ask the monitor (one read of code 0xD7); also detects PIP
-//   lgpbp on [50|75] [--left hdmi1]
+//   lgpbp on [50|75] [--left usbc|dp|hdmi1]
 //                       PBP 50/50 (default) or 75/25; with --left, first switch to that
 //                       input so it ends up on the left (only when PBP is off)
 //   lgpbp off           leave PBP or PIP
@@ -86,5 +86,5 @@ case "input" where args.count == 2:
         print("\(label): sent on 0x50: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
     } catch { fail("\(error)") }
 default:
-    print("usage: lgpbp state | status | on [50|75] [--left hdmi1|usbc] | off | input [usbc|dp|hdmi1|hdmi2]")
+    print("usage: lgpbp state | status | on [50|75] [--left usbc|dp|hdmi1] | off | input [usbc|dp|hdmi1|hdmi2]")
 }
