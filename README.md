@@ -60,8 +60,9 @@ bin/lgpbp input hdmi1  # switch input: usbc, dp, hdmi1, hdmi2 (experimental, see
 ```
 
 Input switching uses the standard input-source code (`0x60`). Reading it works; the
-monitor reports its USB-C / Thunderbolt input as 15 (`0x0F`). Switching is not yet
-confirmed on this model, and is not in the menu bar app.
+monitor reports its USB-C / Thunderbolt input as 15 (`0x0F`). Switching with this
+code is ignored by this model (tested: the input did not change), so it is not in
+the menu bar app.
 
 ### Window layouts (any display)
 

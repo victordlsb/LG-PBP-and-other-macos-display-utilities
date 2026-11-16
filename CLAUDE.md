@@ -33,7 +33,7 @@ and sends nothing to the monitor.
 | Write `0xD7` = 1, 3, 5 | Works |
 | Write `0xD7` = 0, 2, 4 | Ignored |
 | Read `0x60` | Works. The USB-C / Thunderbolt input reads as 15 (`0x0F`) |
-| Write `0x60` | **Not tested yet.** An owner of the same model reports it is ignored |
+| Write `0x60` = `0x11` (HDMI 1) | Ignored: the input stayed on USB-C |
 
 Quirks: a "Get VCP" must be written twice before the monitor answers, and for a
 few seconds after a mode switch it gives no valid reply (retry once after 3 s).

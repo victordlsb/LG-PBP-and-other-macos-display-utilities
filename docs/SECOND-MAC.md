@@ -103,11 +103,9 @@ Tell the owner, plainly:
 ## Input switching
 
 Not finished. `bin/lgpbp input` reads the current input and works on the first
-Mac. `bin/lgpbp input <name>` writes the standard code `0x60`, which has **not been
-confirmed to do anything on this model**. Do not test it on this Mac unless the
-owner asks; if they do, warn them that a successful switch moves the picture to
-the other Mac, and that the way back is the monitor's joystick or the app on the
-other Mac.
+Mac. `bin/lgpbp input <name>` writes the standard code `0x60`, which this model
+**ignores**: tested from the first Mac, the input did not change. There is no need
+to test it again.
 
 The alternative reported to work on LG monitors is code `0xF4` on address `0x50`.
 That is the service channel that `CLAUDE.md` rules out. Do not implement or send it
