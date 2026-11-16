@@ -106,7 +106,8 @@ the iPad as an extended display, click again to disconnect.
 ### Desktop widget positions (any display)
 
 - **Save Widget Positions for This Screen Setup** stores the current arrangement for
-  the current combination of screens.
+  the current combination of screens and their resolutions (the same display at
+  another resolution counts as a different setup).
 - **Restore Widget Positions** applies it again.
 - **Restore Automatically When Screens Change** applies the saved arrangement a few
   seconds after the screen setup changes.

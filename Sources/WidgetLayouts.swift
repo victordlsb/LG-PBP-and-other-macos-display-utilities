@@ -47,12 +47,21 @@ enum WidgetLayouts {
         if let data = try? JSONEncoder().encode(file) { try? data.write(to: url, options: .atomic) }
     }
 
+    /// Identifies a screen by display model and resolution. Widget positions are absolute,
+    /// so the same display at another resolution needs its own arrangement; the shape
+    /// alone (as window layouts use) cannot tell two scaled modes apart.
+    private static func key(for screen: NSScreen) -> String {
+        let id = (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value ?? 0
+        let size = screen.frame.size
+        return "\(CGDisplayVendorNumber(id))-\(CGDisplayModelNumber(id))-\(Int(size.width))x\(Int(size.height))@\(Int(screen.backingScaleFactor))"
+    }
+
     /// Identifies the current screen setup: the main screen first, then the others.
     static func setupKey() -> String {
         let screens = NSScreen.screens
         guard let main = screens.first else { return "none" }
-        let others = screens.dropFirst().map(LayoutStore.key(for:)).sorted()
-        return ([LayoutStore.key(for: main)] + others).joined(separator: "|")
+        let others = screens.dropFirst().map(key(for:)).sorted()
+        return ([key(for: main)] + others).joined(separator: "|")
     }
 
     static var hasSavedForCurrentSetup: Bool { load().setups[setupKey()] != nil }
