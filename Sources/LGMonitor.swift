@@ -44,8 +44,8 @@ enum PBPMode: UInt16 {
 /// which the standard calls DisplayPort 1. Writing 0x60 is ignored by this monitor.
 ///
 /// `switchValue` is what LG's own input-switch code (0xF4 on address 0x50) takes.
-/// Only HDMI 1 has been confirmed on the 40U990A; the others come from notes on
-/// other LG models.
+/// HDMI 1 (0x90) and USB-C (0xD2) are confirmed on the 40U990A; the others come
+/// from notes on other LG models. 0xD1, used for USB-C on some models, does nothing here.
 enum LGInput: UInt16, CaseIterable {
     case usbC = 0x0F, displayPort = 0x10, hdmi1 = 0x11, hdmi2 = 0x12
 
@@ -70,12 +70,16 @@ enum LGInput: UInt16, CaseIterable {
 
     var switchValue: UInt8 {
         switch self {
-        case .usbC: return 0xD1          // unconfirmed; 0xD2 on some LG models
+        case .usbC: return 0xD2          // confirmed (0xD1 does nothing on this model)
         case .displayPort: return 0xD0   // unconfirmed
         case .hdmi1: return 0x90         // confirmed
         case .hdmi2: return 0x91         // unconfirmed
         }
     }
+
+    /// Whether `switchValue` has been seen to work on the 40U990A. Only confirmed
+    /// inputs are offered as the PBP left side.
+    var switchConfirmed: Bool { self == .hdmi1 || self == .usbC }
 }
 
 enum LGError: Error, CustomStringConvertible {
@@ -115,6 +119,17 @@ enum LGMonitor {
         guard CGGetOnlineDisplayList(16, &ids, &count) == .success else { return nil }
         return ids.prefix(Int(count)).first {
             CGDisplayVendorNumber($0) == vendor && models.contains(CGDisplayModelNumber($0))
+        }
+    }
+
+    /// The input this Mac is connected to, from the model number in the EDID (it differs
+    /// per input). Sends nothing to the monitor. Nil when not connected or not recognised.
+    static func ownInput() -> LGInput? {
+        guard let id = displayID() else { return nil }
+        switch CGDisplayModelNumber(id) {
+        case 0x9EBA: return .usbC
+        case 0x9EB8: return .hdmi1
+        default: return nil
         }
     }
 
@@ -159,6 +174,48 @@ enum LGMonitor {
     @discardableResult
     static func setPBP(_ mode: PBPMode) throws -> [UInt8] {
         try setVCP(pbpCode, mode.rawValue)
+    }
+
+    /// The PBP state as the monitor reports it (one read of 0xD7). PIP counts as off,
+    /// since "off" is also what exits it. Returns nil when the monitor gives no valid
+    /// answer, which happens for a few seconds after a mode switch.
+    static func readMode() throws -> PBPMode? {
+        guard let v = try readPBP() else { return nil }
+        return v == 0 ? .off : PBPMode(rawValue: v)
+    }
+
+    /// Seconds to wait after an input switch before the monitor takes the next command.
+    static let switchSettle: TimeInterval = 4
+
+    /// Turn PBP on with `left` on the left side.
+    ///
+    /// The monitor puts the input that is on screen when PBP starts on the left (the
+    /// large part in 75/25), and no command for swapping the sides is known. So this
+    /// first switches to `left`, waits, and then turns PBP on; 0xD7 is accepted even
+    /// from the input that is no longer on screen. Only call it while PBP is off:
+    /// what an input switch does during PBP is untested. Returns the bytes of both
+    /// commands.
+    @discardableResult
+    static func startPBP(_ mode: PBPMode, left: LGInput) throws -> [[UInt8]] {
+        guard mode != .off, left.switchConfirmed else { throw LGError.i2c("PBP left side not allowed") }
+        let switched = try switchInput(value: left.switchValue)
+        Thread.sleep(forTimeInterval: switchSettle)
+        return [switched, try setPBP(mode)]
+    }
+
+    /// Show `input` full screen: turn PBP off first if it is on (`pbpOn`), wait for the
+    /// monitor to settle, then switch input. The switch is never sent while PBP is on,
+    /// because what it does then is untested. Returns the bytes of each command sent.
+    @discardableResult
+    static func showFullScreen(_ input: LGInput, pbpOn: Bool) throws -> [[UInt8]] {
+        guard input.switchConfirmed else { throw LGError.i2c("input not allowed") }
+        var sent: [[UInt8]] = []
+        if pbpOn {
+            sent.append(try setPBP(.off))
+            Thread.sleep(forTimeInterval: 3)
+        }
+        sent.append(try switchInput(value: input.switchValue))
+        return sent
     }
 
     /// Get VCP 0xD7 from the monitor. Returns nil if it gave no valid answer, which

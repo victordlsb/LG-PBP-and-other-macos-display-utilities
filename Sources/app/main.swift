@@ -1,8 +1,11 @@
 // LG PBP — menu bar app: PBP on the LG UltraFine 40U990A, iPad as a display, and window layouts.
 //
 // The app only talks to the monitor when you pick a menu item or press the hotkey,
-// and then it sends a single "set PBP" command. The state shown in the menu is
-// inferred from the shape of the Mac's picture, so displaying it sends nothing.
+// and then it sends a single "set PBP" command (preceded by an input switch when a
+// fixed left side is chosen and PBP is being turned on). It also reads the PBP state
+// (0xD7, a read only) when the menu opens and before a toggle, because over some links
+// (HDMI through an adapter) macOS does not change the picture's shape with PBP, so
+// the shape alone can be wrong. When the monitor does not answer, the shape is used.
 
 import AppKit
 import Carbon.HIToolbox
@@ -24,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let queue = DispatchQueue(label: "lgpbp.monitor")
     private var busy = false
+    /// The last PBP state read from or sent to the monitor; nil until then, and the
+    /// inferred state is used meanwhile. A change made elsewhere (the other Mac, the
+    /// joystick) shows up the next time the menu opens or the toggle is used.
+    private var monitorState: PBPMode?
+    private var modeItems: [NSMenuItem] = []
     private var iPadBusy = false
     private var lastError: String?
     private var hotKeys: [EventHotKeyRef?] = []
@@ -34,6 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var lastLayout: PBPMode {
         get { PBPMode(rawValue: UInt16(UserDefaults.standard.integer(forKey: "lastLayout"))).flatMap { $0 == .off ? nil : $0 } ?? .half }
         set { UserDefaults.standard.set(Int(newValue.rawValue), forKey: "lastLayout") }
+    }
+
+    /// The input to put on the left when PBP is turned on, or nil to leave it to the
+    /// monitor (which puts the input on screen on the left). Stored per Mac: set it on
+    /// the Mac that should not be on the left.
+    private var pbpLeft: LGInput? {
+        get { LGInput(rawValue: UInt16(UserDefaults.standard.integer(forKey: "pbpLeft"))).flatMap { $0.switchConfirmed ? $0 : nil } }
+        set { UserDefaults.standard.set(Int(newValue?.rawValue ?? 0), forKey: "pbpLeft") }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -47,13 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         registerHotKey()
         refreshIcon()
         SnapController.shared.start()
+        ScrollReverser.shared.start()
     }
 
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        let state = LGMonitor.inferredMode()
+        let state = currentState()
+        modeItems = []
 
         if state == nil {
             menu.addItem(disabled("LG UltraFine not connected"))
@@ -66,6 +84,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = state == mode ? .on : .off
             item.isEnabled = state != nil && !busy
             menu.addItem(item)
+            modeItems.append(item)
+        }
+        // Ask the monitor and correct the checkmark when the answer arrives.
+        if state != nil && !busy {
+            queue.async {
+                guard let read = try? LGMonitor.readMode() else { return }
+                DispatchQueue.main.async {
+                    self.monitorState = read
+                    for item in self.modeItems { item.state = item.tag == Int(read.rawValue) ? .on : .off }
+                    self.refreshIcon()
+                }
+            }
         }
         menu.addItem(.separator())
         let toggle = NSMenuItem(title: "Toggle PBP", action: #selector(toggle), keyEquivalent: "p")
@@ -73,6 +103,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         toggle.target = self
         toggle.isEnabled = state != nil && !busy
         menu.addItem(toggle)
+
+        let leftMenu = NSMenu()
+        leftMenu.autoenablesItems = false
+        let choices: [LGInput?] = [nil] + LGInput.allCases.filter(\.switchConfirmed)
+        for input in choices {
+            let item = NSMenuItem(title: input?.label ?? "Input on Screen", action: #selector(pickLeft(_:)), keyEquivalent: "")
+            item.target = self
+            item.tag = Int(input?.rawValue ?? 0)
+            item.state = pbpLeft == input ? .on : .off
+            leftMenu.addItem(item)
+        }
+        let leftItem = NSMenuItem(title: "Left Side in PBP: \(pbpLeft?.label ?? "Input on Screen")", action: nil, keyEquivalent: "")
+        leftItem.submenu = leftMenu
+        menu.addItem(leftItem)
+
+        // One Mac full screen: turns PBP off if needed, then switches input.
+        menu.addItem(.separator())
+        let own = LGMonitor.ownInput()
+        for input in LGInput.allCases.filter(\.switchConfirmed) {
+            let who = own == nil ? "" : (input == own ? "This Mac — " : "Other Mac — ")
+            let isOther = own != nil && input != own
+            let item = NSMenuItem(title: "Full Screen: \(who)\(input.label)", action: #selector(pickFullScreen(_:)),
+                                  keyEquivalent: isOther ? "o" : "")
+            item.keyEquivalentModifierMask = [.control, .option, .command]
+            item.target = self
+            item.tag = Int(input.rawValue)
+            item.isEnabled = state != nil && !busy
+            menu.addItem(item)
+        }
 
         // iPad as an extended display (Sidecar).
         menu.addItem(.separator())
@@ -142,6 +201,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(disabled("Last command failed: \(lastError)"))
         }
         menu.addItem(.separator())
+        let reverse = NSMenuItem(title: "Reverse Mouse Wheel (trackpad stays natural)", action: #selector(toggleReverseWheel), keyEquivalent: "")
+        reverse.target = self
+        reverse.state = ScrollReverser.shared.enabled ? .on : .off
+        menu.addItem(reverse)
+        if ScrollReverser.shared.enabled && !ScrollReverser.shared.active {
+            let grant = NSMenuItem(title: "Grant Accessibility to Reverse the Wheel…", action: #selector(requestAccessibility), keyEquivalent: "")
+            grant.target = self
+            menu.addItem(grant)
+        }
         let login = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -156,6 +224,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
+    /// The monitor's last known PBP state, or the one inferred from the picture.
+    private func currentState() -> PBPMode? {
+        guard LGMonitor.displayID() != nil else { return nil }
+        return monitorState ?? LGMonitor.inferredMode()
+    }
+
     @objc private func screensChanged() {
         refreshIcon()
         // Wait for the screens to settle before touching widget positions.
@@ -167,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func refreshIcon() {
-        let state = LGMonitor.inferredMode()
+        let state = currentState()
         // Remember the PBP mode in use even when it was chosen on the monitor or in the terminal,
         // so the toggle always returns to the last one used.
         if let state, state != .off { lastLayout = state }
@@ -190,22 +264,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc func toggle() {
-        guard let state = LGMonitor.inferredMode() else { NSSound.beep(); return }
-        send(state == .off ? lastLayout : .off)
+        guard !busy, LGMonitor.displayID() != nil else { NSSound.beep(); return }
+        // Ask the monitor first: the picture's shape can be wrong (see the top of this file).
+        busy = true
+        queue.async {
+            let read = try? LGMonitor.readMode()
+            DispatchQueue.main.async {
+                self.busy = false
+                if let read { self.monitorState = read }
+                guard let state = self.currentState() else { NSSound.beep(); return }
+                self.send(state == .off ? self.lastLayout : .off)
+            }
+        }
+    }
+
+    @objc private func pickFullScreen(_ sender: NSMenuItem) {
+        guard let input = LGInput(rawValue: UInt16(sender.tag)) else { return }
+        showFullScreen(input)
+    }
+
+    /// Hotkey: shows the other Mac full screen (the one on the other input).
+    func showOtherMac() {
+        guard let own = LGMonitor.ownInput(),
+              let other = LGInput.allCases.first(where: { $0.switchConfirmed && $0 != own }) else { NSSound.beep(); return }
+        showFullScreen(other)
+    }
+
+    private func showFullScreen(_ input: LGInput) {
+        guard !busy, LGMonitor.displayID() != nil else { NSSound.beep(); return }
+        busy = true
+        queue.async {
+            var failure: String?
+            do {
+                // Ask the monitor whether PBP is on; the picture's shape can be wrong.
+                let read = try? LGMonitor.readMode()
+                let pbpOn = (read ?? LGMonitor.inferredMode() ?? .off) != .off
+                try LGMonitor.showFullScreen(input, pbpOn: pbpOn)
+            } catch { failure = "\(error)" }
+            Thread.sleep(forTimeInterval: failure == nil ? 3 : 0)
+            DispatchQueue.main.async {
+                self.busy = false
+                self.lastError = failure
+                if failure == nil { self.monitorState = .off }
+                if failure != nil { NSSound.beep() }
+                self.refreshIcon()
+            }
+        }
+    }
+
+    @objc private func pickLeft(_ sender: NSMenuItem) {
+        pbpLeft = LGInput(rawValue: UInt16(sender.tag))
     }
 
     private func send(_ mode: PBPMode) {
         guard !busy else { return }
         busy = true
         if mode != .off { lastLayout = mode }
+        // Only switch inputs when PBP is being turned on: changing between 50/50 and
+        // 75/25 keeps the sides, and an input switch during PBP is untested.
+        let left = mode != .off && currentState() == .off ? pbpLeft : nil
         queue.async {
             var failure: String?
-            do { try LGMonitor.setPBP(mode) } catch { failure = "\(error)" }
+            do {
+                if let left { try LGMonitor.startPBP(mode, left: left) } else { try LGMonitor.setPBP(mode) }
+            } catch { failure = "\(error)" }
             // The monitor needs a few seconds to switch; hold further commands until then.
             Thread.sleep(forTimeInterval: failure == nil ? 3 : 0)
             DispatchQueue.main.async {
                 self.busy = false
                 self.lastError = failure
+                if failure == nil { self.monitorState = mode }
                 if failure != nil { NSSound.beep() }
                 self.refreshIcon()
             }
@@ -263,6 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleWidgetAuto() { WidgetLayouts.auto.toggle() }
 
+    @objc private func toggleReverseWheel() { ScrollReverser.shared.enabled.toggle() }
+
     private func restoreWidgets(automatic: Bool) {
         queue.async {
             let note: String?
@@ -293,7 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    // MARK: Global hotkeys (Control-Option-Command-P for PBP, Control-Option-Command-I for the iPad)
+    // MARK: Global hotkeys (Control-Option-Command-P for PBP, -I for the iPad, -O for the other Mac full screen)
 
     private func registerHotKey() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -303,12 +433,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
             let which = id.id
             DispatchQueue.main.async {
-                if which == 1 { AppDelegate.shared.toggle() } else { AppDelegate.shared.toggleFirstIPad() }
+                switch which {
+                case 1: AppDelegate.shared.toggle()
+                case 3: AppDelegate.shared.showOtherMac()
+                default: AppDelegate.shared.toggleFirstIPad()
+                }
             }
             return noErr
         }, 1, &spec, nil, nil)
 
-        for (number, key, name) in [(UInt32(1), kVK_ANSI_P, "P"), (UInt32(2), kVK_ANSI_I, "I")] {
+        for (number, key, name) in [(UInt32(1), kVK_ANSI_P, "P"), (UInt32(2), kVK_ANSI_I, "I"), (UInt32(3), kVK_ANSI_O, "O")] {
             var ref: EventHotKeyRef?
             let id = EventHotKeyID(signature: OSType(0x4C47_5042), id: number)   // 'LGPB'
             let status = RegisterEventHotKey(UInt32(key), UInt32(controlKey | optionKey | cmdKey), id,

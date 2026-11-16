@@ -38,12 +38,24 @@ and sends nothing to the monitor.
 | Write `0x60` = `0x11` (HDMI 1) | Ignored: the input stayed on USB-C |
 | `0xF4` = `0x90` on `0x50`, sent from the active input | Works: switches to HDMI 1 |
 | `0xF4` = `0xD1` on `0x50`, sent from the Mac that was **not** on screen | No effect |
+| `0xF4` = `0xD1` on `0x50`, sent from the HDMI 1 Mac while it **was** on screen (`bin/lgpbp input usbc`) | No visible effect: stayed on HDMI 1 |
+| `0xF4` = `0xD2` on `0x50`, sent from the HDMI 1 Mac alone on screen, PBP off | Works: switches to USB-C / Thunderbolt |
+| PBP turned on from the Thunderbolt Mac while it was on screen | Thunderbolt Mac on the left, HDMI 1 Mac on the right: the layout the owner wants |
 | Read and write `0xD7` over HDMI 1 through a USB-C to HDMI adapter (second Mac) | Works |
 | Write `0xD7` = 5 / 1 from the Mac that is **not** on screen | Works |
 
 PBP side: the input that is on screen when PBP is switched on goes on the **left**
 (the large part in 75/25), whichever Mac sends the command. No DDC command for
-swapping the sides is known.
+swapping the sides is known. `LGMonitor.startPBP` works around it by switching to
+the chosen input first (`0xF4` on `0x50`), waiting 4 s, then writing `0xD7`; the app
+("Left Side in PBP") and `bin/lgpbp on --left hdmi1|usbc` use it only when PBP is off.
+Verified from the HDMI 1 Mac with USB-C as the left side: the picture shows the
+USB-C Mac for ~4 s, then PBP comes on with USB-C left and HDMI 1 right.
+
+"Full Screen" in the app (and ⌃⌥⌘O, "the other Mac") reads `0xD7`, writes `0xD7` = 1
+if PBP is on, waits 3 s, then sends `0xF4` with the input's value. Not run yet. It
+never sends `0xF4` while PBP is on. Which input the Mac is on comes from the EDID
+model number (`LGMonitor.ownInput`), not from the monitor.
 
 The EDID model number depends on the input: `0x9EBA` over USB-C, `0x9EB8` over
 HDMI 1. `LGMonitor.models` accepts both.
@@ -51,12 +63,12 @@ HDMI 1. `LGMonitor.models` accepts both.
 `bin/lgpbp state` only describes the Mac it runs on: on the Mac that is not on
 screen it keeps reporting the last mode, and with a bandwidth-limited link macOS
 may pick a half-width mode while PBP is off. The read of `0xD7` is authoritative.
+For that reason the app reads `0xD7` each time its menu opens and before a toggle,
+and `bin/lgpbp on --left` reads it before deciding to switch inputs. Opening the
+menu therefore sends a read to the monitor.
 
 Open questions about input switching:
 
-- Whether `0xD1` or `0xD2` is the value for USB-C. `0xD1` did nothing, but it was
-  sent from the Mac that was not being shown, so the monitor may simply ignore
-  switch commands from an inactive input.
 - The proven `0x90` switch was sent with `m1ddc set input-alt 144`. The project's
   own `bin/lgpbp input hdmi1` builds the same packet but has not been run yet.
 - Reading `0x60` from the Mac that is not on screen still answers, and still

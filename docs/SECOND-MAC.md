@@ -113,12 +113,8 @@ Only do this after step 4 has shown that the adapter passes DDC, and ask the own
 before each command. Warn them that a successful switch moves the picture to the
 first Mac, and that the way back is the monitor's joystick.
 
-1. With this Mac on screen, run `bin/lgpbp input usbc` (value `0xD1`).
-2. If the picture moves to the first Mac, `0xD1` is the USB-C value. Done.
-3. If nothing happens after 10 seconds, run `bin/lgpbp input usbc-alt` (value `0xD2`).
-4. If that moves the picture, `0xD2` is the value: change `switchValue` for `.usbC`
-   in `Sources/LGMonitor.swift` to `0xD2` and remove the `usbc-alt` argument.
-5. If neither does anything, the adapter may pass reads but not this command, or
-   this monitor uses another value. Stop and report; do not try other values.
+Done: with the HDMI 1 Mac alone on screen, `bin/lgpbp input usbc` (value `0xD2`)
+moves the picture to the USB-C Mac. `0xD1` does nothing on this monitor. There is
+nothing left to test here.
 
 Record the result in the table in `CLAUDE.md`.

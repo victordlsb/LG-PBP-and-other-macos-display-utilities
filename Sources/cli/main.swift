@@ -2,10 +2,12 @@
 //
 //   lgpbp state         PBP state inferred from the Mac's picture (sends nothing to the monitor)
 //   lgpbp status        ask the monitor (one read of code 0xD7); also detects PIP
-//   lgpbp on [50|75]    PBP 50/50 (default) or 75/25
+//   lgpbp on [50|75] [--left hdmi1]
+//                       PBP 50/50 (default) or 75/25; with --left, first switch to that
+//                       input so it ends up on the left (only when PBP is off)
 //   lgpbp off           leave PBP or PIP
 //   lgpbp input         ask the monitor which input is shown (one read of code 0x60)
-//   lgpbp input <name>  switch input: usbc, usbc-alt, dp, hdmi1 or hdmi2 (LG code 0xF4 on address 0x50)
+//   lgpbp input <name>  switch input: usbc, dp, hdmi1 or hdmi2 (LG code 0xF4 on address 0x50)
 
 import Foundation
 
@@ -33,10 +35,34 @@ case "status":
         print("PBP (D7) = \(v): \(label)")
     } catch { fail("\(error)") }
 case "on":
-    switch args.count > 1 ? args[1] : "50" {
-    case "50": send(.half)
-    case "75": send(.wide)
-    default: fail("usage: lgpbp on [50|75]")
+    let usage = "usage: lgpbp on [50|75] [--left \(LGInput.allCases.filter(\.switchConfirmed).map(\.argument).joined(separator: "|"))]"
+    var rest = Array(args.dropFirst())
+    var left: LGInput?
+    if let i = rest.firstIndex(of: "--left") {
+        guard i + 1 < rest.count,
+              let input = LGInput.allCases.first(where: { $0.argument == rest[i + 1] && $0.switchConfirmed })
+        else { fail(usage) }
+        left = input
+        rest.removeSubrange(i...(i + 1))
+    }
+    let mode: PBPMode
+    switch rest.first ?? "50" {
+    case "50": mode = .half
+    case "75": mode = .wide
+    default: fail(usage)
+    }
+    guard rest.count <= 1 else { fail(usage) }
+    // Switching inputs is only for starting PBP; changing between 50/50 and 75/25 keeps the sides.
+    // Ask the monitor whether PBP is off (the picture's shape can be wrong over some links).
+    if let left, ((try? LGMonitor.readMode()) ?? LGMonitor.inferredMode()) == .off {
+        do {
+            let sent = try LGMonitor.startPBP(mode, left: left)
+            print("\(left.label) on the left: sent on 0x50: \(sent[0].map { String(format: "%02X", $0) }.joined(separator: " "))")
+            print("\(mode.label): sent \(sent[1].map { String(format: "%02X", $0) }.joined(separator: " "))")
+        } catch { fail("\(error)") }
+    } else {
+        if left != nil { print("PBP is already on; keeping the current sides") }
+        send(mode)
     }
 case "off":
     send(.off)
@@ -47,22 +73,18 @@ case "input" where args.count == 1:
         print("Input (60) = \(v): \(label)")
     } catch { fail("\(error)") }
 case "input" where args.count == 2:
-    // "usbc-alt" is the second candidate value for USB-C (0xD2), until one is confirmed.
     let value: UInt8
     let label: String
-    if args[1] == "usbc-alt" {
-        value = 0xD2
-        label = "USB-C / Thunderbolt (alternative value)"
-    } else if let input = LGInput.allCases.first(where: { $0.argument == args[1] }) {
+    if let input = LGInput.allCases.first(where: { $0.argument == args[1] }) {
         value = input.switchValue
         label = input.label
     } else {
-        fail("usage: lgpbp input [usbc|usbc-alt|dp|hdmi1|hdmi2]")
+        fail("usage: lgpbp input [usbc|dp|hdmi1|hdmi2]")
     }
     do {
         let bytes = try LGMonitor.switchInput(value: value)
         print("\(label): sent on 0x50: \(bytes.map { String(format: "%02X", $0) }.joined(separator: " "))")
     } catch { fail("\(error)") }
 default:
-    print("usage: lgpbp state | status | on [50|75] | off | input [usbc|usbc-alt|dp|hdmi1|hdmi2]")
+    print("usage: lgpbp state | status | on [50|75] [--left hdmi1|usbc] | off | input [usbc|dp|hdmi1|hdmi2]")
 }

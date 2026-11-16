@@ -43,9 +43,26 @@ permission. If window snapping stops working after a rebuild, run
 Menu items for **PBP 50/50**, **PBP 75/25** and **Off**, plus **⌃⌥⌘P** to toggle
 between off and the last mode used. Off also exits PIP.
 
-The app only talks to the monitor when you pick an item or press the hotkey. The
-state shown in the menu is inferred from the shape of the picture the Mac is sending,
-so displaying it sends nothing.
+The app only talks to the monitor when you open the menu, pick an item or press the
+hotkey. To show the state it reads the PBP code (`0xD7`, a read only) when the menu
+opens and before toggling, because over some links (HDMI through a USB-C adapter)
+macOS keeps the same picture shape with PBP on or off. Until the answer arrives, or
+when the monitor does not answer, the state is inferred from the picture's shape.
+
+**Which side each Mac gets.** The monitor puts the input that is on screen when PBP
+starts on the left (and on the large part in 75/25). No command for swapping the
+sides is known, so to always have the same input on the left, set **Left Side in
+PBP** in the menu on the *other* Mac. For example, with one Mac on USB-C and one on
+HDMI 1, choosing **HDMI 1** on the USB-C Mac makes it switch the monitor to HDMI 1,
+wait four seconds and then turn PBP on, so the HDMI Mac ends up on the left. The
+picture briefly shows the HDMI Mac full screen in between. The setting is stored
+per Mac, only applies when PBP is being turned on, and only offers inputs whose
+switch code is confirmed (currently HDMI 1 and USB-C).
+
+**Full Screen: This Mac / Other Mac** shows one Mac on the whole screen. If PBP is
+on, it is turned off first; then the monitor switches to that input. **⌃⌥⌘O** shows
+the other Mac (the one on the other input) from whichever Mac you press it on. The
+app tells which input it is on from the monitor's EDID, without asking the monitor.
 
 The same commands are available in the terminal:
 
@@ -54,15 +71,15 @@ bin/lgpbp state        # inferred from the Mac's picture; sends nothing to the m
 bin/lgpbp status       # asks the monitor; also detects PIP
 bin/lgpbp on           # PBP 50/50
 bin/lgpbp on 75        # PBP 75/25
+bin/lgpbp on --left usbc    # switch to that input first, so it is on the left (hdmi1 or usbc)
 bin/lgpbp off
 bin/lgpbp input        # the input this Mac is connected to
-bin/lgpbp input hdmi1  # switch input: usbc, usbc-alt, dp, hdmi1, hdmi2 (experimental)
+bin/lgpbp input hdmi1  # switch input: usbc, dp, hdmi1, hdmi2 (dp and hdmi2 unconfirmed)
 ```
 
-Input switching is experimental and not in the menu bar app yet. This monitor
-ignores the standard input-source code (`0x60`), so switching uses LG's own code,
-`0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`) is confirmed;
-the value for switching back to USB-C is still being worked out.
+This monitor ignores the standard input-source code (`0x60`), so switching uses
+LG's own code, `0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`)
+and to USB-C (`0xD2`) is confirmed; DisplayPort and HDMI 2 are not.
 
 ### Window layouts (any display)
 
@@ -97,6 +114,16 @@ the iPad as an extended display, click again to disconnect.
 Restoring restarts Notification Center, so widgets disappear for a second or two.
 If widgets were added or removed since saving, the app refuses to restore and asks
 you to save again.
+
+### Mouse wheel direction (any Mac)
+
+**Reverse Mouse Wheel (trackpad stays natural)** flips only mouse-wheel scrolling and
+leaves macOS's "natural scrolling" on for the trackpad. It tells them apart by the
+event, not the device: a wheel scrolls in discrete steps, a trackpad (or Magic Mouse)
+scrolls continuously. That also covers a mouse used from another Mac through
+Universal Control, where LG's software on the other Mac no longer applies. The
+setting is per Mac: turn it on only where the wheel isn't already reversed. Needs
+Accessibility access.
 
 ## How PBP control works
 
@@ -173,6 +200,7 @@ time and save a record of the values before you change anything.
 | `Sources/LayoutEditor.swift` | The layout editor |
 | `Sources/Sidecar.swift` | iPad as a display |
 | `Sources/WidgetLayouts.swift` | Widget position save and restore |
+| `Sources/ScrollReverser.swift` | Mouse-wheel direction reversal |
 | `Sources/app/main.swift` | Menu bar app |
 | `Sources/cli/main.swift` | Command-line tool |
 
