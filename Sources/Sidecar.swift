@@ -34,6 +34,9 @@ enum Sidecar {
         return list("connectedDevices").contains { $0.isEqual(device) || name(of: $0) == wanted }
     }
 
+    /// iPads currently connected as displays, in reach or not.
+    static var connectedDevices: [NSObject] { list("connectedDevices") }
+
     /// Names of the iPads currently connected as displays.
     static var connectedNames: Set<String> { Set(list("connectedDevices").map(name(of:))) }
 

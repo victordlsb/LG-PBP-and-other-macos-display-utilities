@@ -122,6 +122,11 @@ macOS disconnects the iPad whenever the LG changes shape or goes away (PBP on or
 the other Mac full screen). The app cannot prevent that, so it connects the iPad again
 a few seconds later. An iPad you disconnect yourself stays disconnected.
 
+When the Mac turns up on a different network (you left the place where the iPad is),
+the app disconnects the iPad, because macOS otherwise keeps the display session alive
+and goes on trying to reach it. Networks are told apart by their router, so this needs
+no Location permission, and a VPN does not count as a move.
+
 ### Desktop widget positions (any display)
 
 - **Save Widget Positions for This Screen Setup** stores the current arrangement for
@@ -219,6 +224,7 @@ time and save a record of the values before you change anything.
 | `Sources/Layouts.swift` | Layout model and storage |
 | `Sources/LayoutEditor.swift` | The layout editor |
 | `Sources/Sidecar.swift` | iPad as a display |
+| `Sources/NetworkIdentity.swift` | Tells one local network from another |
 | `Sources/Peer.swift` | Link between the two Macs: wake the other picture, share the input on screen |
 | `Sources/WidgetLayouts.swift` | Widget position save and restore |
 | `Sources/ScrollReverser.swift` | Mouse-wheel direction reversal |

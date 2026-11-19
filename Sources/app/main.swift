@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var iPadsToReconnect: Set<String> = []
     private var iPadsDroppedAt = Date.distantPast
     private var lgShape = ""
+    /// The networks the Mac was on while an iPad was last seen connected: see `networkChanged()`.
+    private var iPadNetworks: Set<String> = []
     private var lgChangedAt = Date.distantPast
     private var lastError: String?
     private var hotKeys: [EventHotKeyRef?] = []
@@ -75,6 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshIcon()
         lgShape = currentLGShape()
         iPadsOnDisplay = Sidecar.connectedNames
+        if !iPadsOnDisplay.isEmpty { iPadNetworks = NetworkIdentity.current() }
+        NetworkIdentity.onChange { [weak self] in self?.networkChanged() }
         SnapController.shared.start()
         ScrollReverser.shared.start()
         Peer.shared.onShown = { [weak self] input in self?.fullScreenInput = input }
@@ -389,6 +393,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         Sidecar.setConnected(device, connect) { failure in
             self.iPadBusy = false
+            if connect, failure == nil { self.iPadNetworks = NetworkIdentity.current() }
             self.lastError = failure.map { "iPad display: \($0)" }
             if failure != nil { NSSound.beep() }
         }
@@ -412,6 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if shape != lgShape { lgShape = shape; lgChangedAt = now }
 
         let connected = Sidecar.connectedNames
+        rememberIPadNetwork(connected)
         let dropped = iPadsOnDisplay.subtracting(connected).subtracting(iPadsToReconnect)
         iPadsOnDisplay = connected.union(iPadsToReconnect)
         iPadsToReconnect.subtract(connected)
@@ -425,6 +431,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else if now.timeIntervalSince(iPadsDroppedAt) >= Self.iPadDropWindow {
             iPadsOnDisplay.subtract(iPadsToReconnect)
             iPadsToReconnect = []
+        }
+    }
+
+    // The iPad stays at home. macOS keeps its display session after the Mac has left
+    // (it goes on trying to reach the iPad), so when the Mac turns up on a different
+    // network the iPad is disconnected. Having no network at all is not a move: Sidecar
+    // also works over a cable or directly between the devices.
+
+    private func rememberIPadNetwork(_ connected: Set<String>) {
+        guard !connected.isEmpty else { return }
+        let networks = NetworkIdentity.current()
+        // Keep the place where it was connected; only fill it in when unknown.
+        if iPadNetworks.isEmpty || !iPadNetworks.isDisjoint(with: networks) { iPadNetworks.formUnion(networks) }
+    }
+
+    private func networkChanged() {
+        let networks = NetworkIdentity.current()
+        let connected = Sidecar.connectedNames
+        rememberIPadNetwork(connected)
+        guard !networks.isEmpty, !iPadNetworks.isEmpty, iPadNetworks.isDisjoint(with: networks) else { return }
+        iPadNetworks = []
+        iPadReconnect?.cancel()
+        iPadsToReconnect = []
+        iPadsOnDisplay = []
+        var asked = Set<String>()
+        for device in Sidecar.connectedDevices + Sidecar.devices {
+            let name = Sidecar.name(of: device)
+            guard connected.contains(name), asked.insert(name).inserted else { continue }
+            Sidecar.setConnected(device, false) { _ in }
         }
     }
 
