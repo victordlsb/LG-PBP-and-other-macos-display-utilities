@@ -6,6 +6,8 @@
 // (0xD7, a read only) when the menu opens and before a toggle, because over some links
 // (HDMI through an adapter) macOS does not change the picture's shape with PBP, so
 // the shape alone can be wrong. When the monitor does not answer, the shape is used.
+// While the LG is the sound output, the keyboard's volume keys set the monitor's speaker
+// volume (0x62): see VolumeKeys.swift.
 
 import AppKit
 import Carbon.HIToolbox
@@ -25,8 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static var shared: AppDelegate!
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-    private let queue = DispatchQueue(label: "lgpbp.monitor")
+    private let queue = LGMonitor.queue
     private var busy = false
+    /// True while a PBP or input command is in progress; the monitor gives no valid
+    /// answers for a few seconds after one, so the volume keys wait.
+    var monitorBusy: Bool { busy }
     /// The last PBP state read from or sent to the monitor; nil until then, and the
     /// inferred state is used meanwhile. A change made elsewhere (the other Mac, the
     /// joystick) shows up the next time the menu opens or the toggle is used.
@@ -81,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NetworkIdentity.onChange { [weak self] in self?.networkChanged() }
         SnapController.shared.start()
         ScrollReverser.shared.start()
+        VolumeKeys.shared.start()
         Peer.shared.onShown = { [weak self] input in self?.fullScreenInput = input }
         Peer.shared.start()
     }
@@ -227,6 +233,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(reverse)
         if ScrollReverser.shared.enabled && !ScrollReverser.shared.active {
             let grant = NSMenuItem(title: "Grant Accessibility to Reverse the Wheel…", action: #selector(requestAccessibility), keyEquivalent: "")
+            grant.target = self
+            menu.addItem(grant)
+        }
+        let volume = NSMenuItem(title: "Volume Keys Control the LG Speakers", action: #selector(toggleVolumeKeys), keyEquivalent: "")
+        volume.target = self
+        volume.state = VolumeKeys.shared.enabled ? .on : .off
+        menu.addItem(volume)
+        if VolumeKeys.shared.enabled && !VolumeKeys.shared.active {
+            let grant = NSMenuItem(title: "Grant Accessibility for the Volume Keys…", action: #selector(requestAccessibility), keyEquivalent: "")
             grant.target = self
             menu.addItem(grant)
         }
@@ -531,6 +546,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func toggleWidgetAuto() { WidgetLayouts.auto.toggle() }
 
     @objc private func toggleReverseWheel() { ScrollReverser.shared.enabled.toggle() }
+
+    @objc private func toggleVolumeKeys() { VolumeKeys.shared.enabled.toggle() }
 
     private func restoreWidgets(automatic: Bool) {
         queue.async {

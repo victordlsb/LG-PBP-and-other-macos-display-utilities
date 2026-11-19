@@ -15,8 +15,9 @@ factory-reset it. So:
    the damage.** Exactly one thing may be sent there: the input-switch code `0xF4`
    with one of the values `0x90`, `0x91`, `0xD0`, `0xD1`, `0xD2`. The owner accepted
    that risk for this command only. No other code, no reads, no scans, ever.
-3. **Everything else stays on the standard address `0x51`**, and only two codes
-   are in scope there: `0xD7` (PBP) and `0x60` (read the current input). All monitor
+3. **Everything else stays on the standard address `0x51`**, and only three codes
+   are in scope there: `0xD7` (PBP), `0x60` (read the current input) and `0x62`
+   (speaker volume, added with the owner's approval on 2026-11-19). All monitor
    access lives in `Sources/LGMonitor.swift`; keep it that way.
 4. **Ask the owner before sending the monitor anything**, read or write. Say
    exactly which command you will run and wait for a yes. One approval covers one
@@ -42,6 +43,8 @@ and sends nothing to the monitor.
 | `0xF4` = `0xD2` on `0x50`, sent from the HDMI 1 Mac alone on screen, PBP off | Works: switches to USB-C / Thunderbolt |
 | PBP turned on from the Thunderbolt Mac while it was on screen | Thunderbolt Mac on the left, HDMI 1 Mac on the right: the layout the owner wants |
 | Read and write `0xD7` over HDMI 1 through a USB-C to HDMI adapter (second Mac) | Works |
+| Read `0x62` on `0x51` (`m1ddc get volume`) | Works: 30, the level in the monitor's menu |
+| Write `0x62` = 25 on `0x51` (`m1ddc set volume 25`), twice | Works: the menu went from 30, then 31, to 25; nothing else changed |
 | `0xF4` = `0xD0` on `0x50`, sent from the DisplayPort Mac while the USB-C Mac was on screen | Works: switches to DisplayPort. So switching works from the Mac that is **not** on screen |
 | Write `0xD7` = 5 / 1 from the Mac that is **not** on screen | Works |
 
@@ -89,6 +92,12 @@ Open questions about input switching:
   own `bin/lgpbp input hdmi1` builds the same packet but has not been run yet.
 - Reading `0x60` from the Mac that is not on screen still answers, and still
   reports that Mac's own input.
+
+Volume keys (`Sources/VolumeKeys.swift`, verified from the app: one point per press): macOS has no volume control for DisplayPort
+or HDMI audio, so while the LG is the default sound output the app catches the volume
+and mute keys and writes `0x62` (reading it first when the last known level is over
+5 s old). Mute is volume 0 plus a remembered level; the monitor's mute code (`0x8D`) is
+not used and has not been tried.
 
 Quirks: a "Get VCP" must be written twice before the monitor answers, and for a
 few seconds after a mode switch it gives no valid reply (retry once after 3 s).

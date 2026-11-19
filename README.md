@@ -89,12 +89,24 @@ bin/lgpbp on --left usbc    # switch to that input first, so it is on the left (
 bin/lgpbp off
 bin/lgpbp input        # the input this Mac is connected to
 bin/lgpbp input dp     # switch input: usbc, dp, hdmi1, hdmi2 (hdmi2 unconfirmed)
+bin/lgpbp volume       # the monitor's speaker volume
+bin/lgpbp volume 25    # set it (0-100)
 ```
 
 This monitor ignores the standard input-source code (`0x60`), so switching uses
 LG's own code, `0xF4` on the alternate address `0x50`. Switching to HDMI 1 (`0x90`),
 USB-C (`0xD2`) and DisplayPort (`0xD0`) is confirmed; HDMI 2 is not. The menu only
 offers the inputs listed in `LGInput.inUse` (currently USB-C and DisplayPort).
+
+### Speaker volume keys (LG UltraFine 40U990A)
+
+macOS cannot set the volume of sound sent over DisplayPort or HDMI, so with the LG as
+the sound output the keyboard's volume keys do nothing. **Volume Keys Control the LG
+Speakers** (on by default) catches the volume-up, volume-down and mute keys while the
+LG is the output and sets the monitor's own volume (`0x62`) instead, with a small level
+indicator on the LG. Each press changes it by one point out of 100. Mute sets the volume to 0
+and the next press of mute brings it back. With any other output the keys work as
+usual. Needs Accessibility access.
 
 ### Window layouts (any display)
 
@@ -201,7 +213,7 @@ The alternate address is an LG service channel and is the likely culprit, though
 that was never proven.
 
 This code therefore sends a fixed, short list of commands and nothing else: PBP
-(`0xD7`) and an input read (`0x60`) on the standard address, and the input switch
+(`0xD7`), an input read (`0x60`) and the speaker volume (`0x62`) on the standard address, and the input switch
 (`0xF4`) with five allowed values on `0x50`. If you extend it, add codes one at a
 time and save a record of the values before you change anything.
 
@@ -228,6 +240,7 @@ time and save a record of the values before you change anything.
 | `Sources/Peer.swift` | Link between the two Macs: wake the other picture, share the input on screen |
 | `Sources/WidgetLayouts.swift` | Widget position save and restore |
 | `Sources/ScrollReverser.swift` | Mouse-wheel direction reversal |
+| `Sources/VolumeKeys.swift` | Volume keys for the LG's speakers |
 | `Sources/app/main.swift` | Menu bar app |
 | `Sources/cli/main.swift` | Command-line tool |
 

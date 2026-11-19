@@ -1,7 +1,8 @@
 // Shared monitor access for the LG UltraFine 40U990A (Apple Silicon).
 //
 // Everything sent to the monitor goes through this file, and it is limited to:
-//   - 0xD7 (PBP) and 0x60 (read the input), on the standard DDC address 0x51;
+//   - 0xD7 (PBP), 0x60 (read the input) and 0x62 (speaker volume), on the standard DDC
+//     address 0x51;
 //   - 0xF4 (switch input), on LG's alternate address 0x50, with a fixed list of values.
 // 0x50 is LG's service channel. A sweep of it during development damaged the monitor's
 // settings, so nothing else may ever be sent there: no other code, no reads, no scans.
@@ -9,6 +10,9 @@
 // Values of 0xD7 verified on this monitor:
 //   1 = off (also exits PIP)   3 = PBP 75/25 (3840 + 1280)   5 = PBP 50/50 (2560 + 2560)
 //   0 = reported while PIP is active; ignored as a command.   2 and 4 are ignored.
+//
+// 0x62 (speaker volume) verified on this monitor: reads back the level shown in the
+// monitor's menu (30 at the time), and writing 25 set the menu to 25 and changed nothing else.
 
 import Foundation
 import IOKit
@@ -112,10 +116,18 @@ enum LGMonitor {
     private static let host: UInt8 = 0x51      // standard host source address
     private static let pbpCode: UInt8 = 0xD7
     private static let inputCode: UInt8 = 0x60
+    private static let volumeCode: UInt8 = 0x62
+    /// Highest volume ever written. The monitor reports its own maximum in each read; this
+    /// is a cap in case that answer is garbled.
+    static let volumeCap: UInt16 = 100
     private static let altHost: UInt8 = 0x50          // LG service channel: input switching only
     private static let inputSwitchCode: UInt8 = 0xF4
     /// The only values that may be sent on the service channel.
     static let allowedSwitchValues: Set<UInt8> = [0x90, 0x91, 0xD0, 0xD1, 0xD2]
+
+    /// Serial queue for everything sent to the monitor, so that commands from different
+    /// parts of the app never interleave on the I2C bus (a read is several transfers).
+    static let queue = DispatchQueue(label: "lgpbp.monitor")
 
     static func displayID() -> CGDirectDisplayID? {
         var count: UInt32 = 0
@@ -253,6 +265,19 @@ enum LGMonitor {
         try readVCP(inputCode)
     }
 
+    /// Get VCP 0x62 (speaker volume): the current level and the monitor's maximum.
+    /// Returns nil if the monitor gave no valid answer.
+    static func readVolume() throws -> (level: UInt16, max: UInt16)? {
+        guard let r = try readVCPWithMax(volumeCode) else { return nil }
+        return (r.current, min(r.max == 0 ? volumeCap : r.max, volumeCap))
+    }
+
+    /// Set VCP 0x62 (speaker volume), capped at `volumeCap`. Returns the bytes sent.
+    @discardableResult
+    static func setVolume(_ level: UInt16) throws -> [UInt8] {
+        try setVCP(volumeCode, min(level, volumeCap))
+    }
+
     private static func setVCP(_ code: UInt8, _ value: UInt16) throws -> [UInt8] {
         let svc = try service()
         var packet = checksummed([0x84, 0x03, code, UInt8(value >> 8), UInt8(value & 0xFF)])
@@ -266,6 +291,10 @@ enum LGMonitor {
     }
 
     private static func readVCP(_ code: UInt8) throws -> UInt16? {
+        try readVCPWithMax(code)?.current
+    }
+
+    private static func readVCPWithMax(_ code: UInt8) throws -> (current: UInt16, max: UInt16)? {
         let svc = try service()
         var packet = checksummed([0x82, 0x01, code])
         for _ in 0..<3 {
@@ -282,7 +311,7 @@ enum LGMonitor {
             var chk: UInt8 = 0x50
             for b in r[0..<10] { chk ^= b }
             if r[2] == 0x02, r[3] == 0, r[4] == code, chk == r[10] {
-                return UInt16(r[8]) << 8 | UInt16(r[9])
+                return (UInt16(r[8]) << 8 | UInt16(r[9]), UInt16(r[6]) << 8 | UInt16(r[7]))
             }
             usleep(100_000)
         }
